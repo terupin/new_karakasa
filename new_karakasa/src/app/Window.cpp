@@ -98,6 +98,7 @@ LRESULT CALLBACK Window::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 bool Window::InitD3D()
 {
+	//スワップチェーン（画面表示用の表裏バッファ管理）の設定
 	DXGI_SWAP_CHAIN_DESC scd = {};
 	scd.BufferCount = 1;
 	scd.BufferDesc.Width = (UINT)m_width;
@@ -118,6 +119,7 @@ bool Window::InitD3D()
 	flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
+	// GPU描画に必要な3点セットをまとめて作成
 	D3D_FEATURE_LEVEL featureLevel;
 	HRESULT hr = D3D11CreateDeviceAndSwapChain(
 		nullptr,
@@ -153,12 +155,6 @@ bool Window::InitD3D()
 	//バインド
 	ID3D11RenderTargetView* rtvs[] = { m_rtv.Get() };
 	m_context->OMSetRenderTargets(1, rtvs, nullptr);
-
-
-
-
-
-
 
 	return true;
 }
