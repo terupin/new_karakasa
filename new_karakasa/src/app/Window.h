@@ -4,6 +4,9 @@
 #include<d3d11.h>
 #include <cstdint>
 #include<wrl/client.h>
+#include<d3dcompiler.h>
+
+#pragma comment(lib,"d3dcompiler.lib")
 
 class Window {
 public:
@@ -20,9 +23,14 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context = nullptr;
 	Microsoft::WRL::ComPtr<IDXGISwapChain> m_swapChain = nullptr;
 	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_rtv = nullptr;
+	Microsoft::WRL::ComPtr<ID3D11VertexShader> m_vs;
+	Microsoft::WRL::ComPtr<ID3D11PixelShader> m_ps;
+	Microsoft::WRL::ComPtr<ID3D11InputLayout> m_inputLayout;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> m_vb;
 
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 	bool InitD3D();
 	void Render();
+	bool InitTriangle();
 };
