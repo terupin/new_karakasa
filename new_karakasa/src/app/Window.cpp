@@ -199,16 +199,28 @@ void Window::Render()
 	static float angle = 0.0f;
 	angle += 0.01f;
 
-	float x = 0.1f * sinf(angle);
+	//Worldオブジェクトの返還
+	XMMATRIX W = XMMatrixRotationZ(angle) * XMMatrixTranslation(0.0f, 0.0f, 0.0f);
 
-	XMMATRIX R = XMMatrixRotationZ(angle);
-	XMMATRIX T = XMMatrixTranslation(x, 0.0f, 0.0f);
+	//View(カメラ)
+	XMVECTOR eye = XMVectorSet(0.0f, 0.0f, -2.0f, 1.0f); //カメラ位置
+	XMVECTOR target = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);  //見る先
+	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);  //上方向
+	XMMATRIX V = XMMatrixLookAtLH(eye, target, up);
 
-	XMMATRIX M = T * R;
+	//プロジェクション（遠近）
+	float fovY = XM_PIDIV4; //45度
+	float aspect = (float)m_width / (float)m_height; //アスペクト比
+	float nearZ = 0.1f;
+	float farZ = 100.0f;
+	XMMATRIX P = XMMatrixPerspectiveFovLH(fovY, aspect, nearZ, farZ);
 
-	XMMATRIX mvp = XMMatrixTranspose(M);
+	//合成
+	XMMATRIX MVP = W * V * P;
 
-	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &mvp, 0, 0);
+	//転置して定数バッファへ
+	XMMATRIX mvpT = XMMatrixTranspose(MVP);
+	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &mvpT, 0, 0);
 
 	ID3D11Buffer* cbs[] = { m_cb.Get() };
 	m_context->VSSetConstantBuffers(0, 1, cbs);
