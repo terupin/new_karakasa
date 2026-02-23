@@ -28,6 +28,8 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11InputLayout> m_inputLayout;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> m_vb;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cb;
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> m_depthTex;
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_dsv;
 
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 

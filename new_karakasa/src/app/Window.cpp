@@ -161,9 +161,29 @@ bool Window::InitD3D()
 	);
 	if (FAILED(hr)) return false;
 
+	//深度バッファ（Depth Buffer）
+	D3D11_TEXTURE2D_DESC depthDesc{};
+	depthDesc.Width = (UINT)m_width;
+	depthDesc.Height = (UINT)m_height;
+	depthDesc.MipLevels = 1;
+	depthDesc.ArraySize = 1;
+	depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	depthDesc.SampleDesc.Count = 1;
+	depthDesc.SampleDesc.Quality = 0;
+	depthDesc.Usage = D3D11_USAGE_DEFAULT;
+	depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+
+	hr = m_device->CreateTexture2D(&depthDesc, nullptr, m_depthTex.GetAddressOf());
+	if (FAILED(hr)) return false;
+
+	//DSV作成
+	hr = m_device->CreateDepthStencilView(m_depthTex.Get(), nullptr, m_dsv.GetAddressOf());
+	if (FAILED(hr)) return false;
+
+
 	//バインド
 	ID3D11RenderTargetView* rtvs[] = { m_rtv.Get() };
-	m_context->OMSetRenderTargets(1, rtvs, nullptr);
+	m_context->OMSetRenderTargets(1, rtvs, m_dsv.Get());
 
 	D3D11_VIEWPORT vp{};
 	vp.TopLeftX = 0;
@@ -184,6 +204,7 @@ void Window::Render()
 {
 	const float clearColor[4] = { 0.1f, 0.2f, 0.8f, 1.0f };
 	m_context->ClearRenderTargetView(m_rtv.Get(), clearColor);
+	m_context->ClearDepthStencilView(m_dsv.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
@@ -224,6 +245,18 @@ void Window::Render()
 
 	ID3D11Buffer* cbs[] = { m_cb.Get() };
 	m_context->VSSetConstantBuffers(0, 1, cbs);
+
+	// 1枚目（奥）
+	XMMATRIX W1 = XMMatrixTranslation(-0.2f, 0.0f, 0.2f); // zを奥側（※LHなので +zが奥寄り）
+	XMMATRIX MVP1 = XMMatrixTranspose(W1 * V * P);
+	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &MVP1, 0, 0);
+	m_context->Draw(3, 0);
+
+	// 2枚目（手前）
+	XMMATRIX W2 = XMMatrixTranslation(0.2f, 0.0f, 0.0f); // zを手前側
+	XMMATRIX MVP2 = XMMatrixTranspose(W2 * V * P);
+	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &MVP2, 0, 0);
+	m_context->Draw(3, 0);
 
 	m_context->Draw(3, 0);
 
