@@ -1,10 +1,12 @@
 #include "Window.h"
 #include <d3d11.h>
+#include <DirectXMath.h>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 
 using Microsoft::WRL::ComPtr;
+using namespace DirectX;
 
 struct Vertex
 {
@@ -194,6 +196,23 @@ void Window::Render()
 	m_context->VSSetShader(m_vs.Get(), nullptr, 0);
 	m_context->PSSetShader(m_ps.Get(), nullptr, 0);
 
+	static float angle = 0.0f;
+	angle += 0.01f;
+
+	float x = 0.1f * sinf(angle);
+
+	XMMATRIX R = XMMatrixRotationZ(angle);
+	XMMATRIX T = XMMatrixTranslation(x, 0.0f, 0.0f);
+
+	XMMATRIX M = T * R;
+
+	XMMATRIX mvp = XMMatrixTranspose(M);
+
+	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &mvp, 0, 0);
+
+	ID3D11Buffer* cbs[] = { m_cb.Get() };
+	m_context->VSSetConstantBuffers(0, 1, cbs);
+
 	m_context->Draw(3, 0);
 
 	m_swapChain->Present(1, 0);
@@ -288,6 +307,14 @@ bool Window::InitTriangle()
 	initData.pSysMem = verts;
 
 	hr = m_device->CreateBuffer(&bd, &initData, m_vb.GetAddressOf());
+	if (FAILED(hr)) return false;
+
+	D3D11_BUFFER_DESC cbd{};
+	cbd.Usage = D3D11_USAGE_DEFAULT;
+	cbd.ByteWidth = sizeof(float) * 16;
+	cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+	hr = m_device->CreateBuffer(&cbd, nullptr, m_cb.GetAddressOf());
 	if (FAILED(hr)) return false;
 
 	return true;

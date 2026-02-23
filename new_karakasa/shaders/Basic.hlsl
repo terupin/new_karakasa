@@ -1,3 +1,7 @@
+cbuffer Transform : register(b0)
+{
+    float4x4 mvp;
+}
 struct VSInput
 {
     float3 pos : POSITION;
@@ -13,7 +17,7 @@ struct VSOutput
 VSOutput VSMain(VSInput input)
 {
     VSOutput o;
-    o.pos = float4(input.pos, 1.0f);
+    o.pos = mul(float4(input.pos, 1.0f), mvp);
     o.col = input.col;
     return o;
 }

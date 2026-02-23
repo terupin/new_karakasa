@@ -27,6 +27,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> m_ps;
 	Microsoft::WRL::ComPtr<ID3D11InputLayout> m_inputLayout;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> m_vb;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cb;
 
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
