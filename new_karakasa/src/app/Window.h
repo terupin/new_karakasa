@@ -19,8 +19,15 @@ struct CBLight
 {
 	DirectX::XMFLOAT3 lightDir;
 	float pad0;
+
 	DirectX::XMFLOAT4 lightColor;
 	DirectX::XMFLOAT4 ambient;
+
+	DirectX::XMFLOAT3 cameraPos;
+	float specStrength;
+
+	float shininess;
+	DirectX::XMFLOAT3 pad1; //16ÉoÉCÉgã´äEçáÇÌÇπ
 };
 
 class Window {

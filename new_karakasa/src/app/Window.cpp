@@ -245,16 +245,14 @@ void Window::Render()
 	//ViewProj‚Ìì¬
 	XMMATRIX VP = V * P;
 
-	//b0 Transform
-	CBTransform cbT{};
-	XMStoreFloat4x4(&cbT.viewProj, XMMatrixTranspose(VP));;
-	m_context->UpdateSubresource(m_cbTransform.Get(), 0, nullptr, &cbT, 0, 0);
-
 	//b1 Light
 	CBLight cbL{};
-	cbL.lightDir = XMFLOAT3(0.0f, 0.0f, 1.0f);
+	cbL.lightDir = XMFLOAT3(0.3f, -0.6f, 1.0f);
 	cbL.lightColor = XMFLOAT4(1, 1, 1, 1);
-	cbL.ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1);
+	cbL.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
+	cbL.cameraPos = m_camPos;
+	cbL.specStrength = 4.0f;
+	cbL.shininess = 8.0f;
 	m_context->UpdateSubresource(m_cbLight.Get(), 0, nullptr, &cbL, 0, 0);
 
 	// VS/PS ‚ÉƒZƒbƒg
@@ -264,6 +262,8 @@ void Window::Render()
 	ID3D11Buffer* psCBs[] = { m_cbLight.Get() };
 	m_context->PSSetConstantBuffers(1, 1, psCBs);
 
+	ID3D11Buffer* psCBs0[] = { m_cbTransform.Get() };
+	m_context->PSSetConstantBuffers(0, 1, psCBs0);
 
 	//•`‰æ
 	XMMATRIX baseW = XMMatrixRotationZ(angle);
