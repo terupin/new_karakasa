@@ -9,7 +9,19 @@
 
 #pragma comment(lib,"d3dcompiler.lib")
 
-using namespace DirectX;
+struct CBTransform
+{
+	DirectX::XMFLOAT4X4 world;
+	DirectX::XMFLOAT4X4 viewProj;
+};
+
+struct CBLight
+{
+	DirectX::XMFLOAT3 lightDir;
+	float pad0;
+	DirectX::XMFLOAT4 lightColor;
+	DirectX::XMFLOAT4 ambient;
+};
 
 class Window {
 public:
@@ -22,7 +34,7 @@ private:
 	int m_width = 0;
 	int m_height = 0;
 
-	XMFLOAT3 m_camPos = { 0.0f,0.0f,-2.0f };
+	DirectX::XMFLOAT3 m_camPos = { 0.0f,0.2f,-3.0f };
 	float m_camYaw = 0.0f;
 	float m_camPitch = 0.0f;
 
@@ -34,9 +46,10 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> m_ps;
 	Microsoft::WRL::ComPtr<ID3D11InputLayout> m_inputLayout;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> m_vb;
-	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cb;
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> m_depthTex;
 	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_dsv;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbTransform;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbLight;
 
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
@@ -44,6 +57,8 @@ private:
 	void Render();
 	bool InitTriangle();
 	void UpdateCamera();
-	XMMATRIX GetViewMatrix() const;
-	void DrawTriangle(const XMMATRIX& W, const XMMATRIX& V, const XMMATRIX& P);
+	DirectX::XMMATRIX GetViewMatrix() const;
+	void DrawTriangle(const DirectX::XMMATRIX& W,
+		const DirectX::XMMATRIX& V,
+		const DirectX::XMMATRIX& P);
 };

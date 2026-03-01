@@ -10,8 +10,16 @@ using namespace DirectX;
 
 struct Vertex
 {
-	float x, y, z;
-	float r, g, b, a;
+	float x, y, z; //Position
+	float nx, ny, nz; //Normal
+	float r, g, b, a; //Color
+};
+
+Vertex verts[3] =
+{
+	{  0.0f,  0.5f, 0.0f,   0,0,-1,   1,0,0,1 },
+	{  0.5f, -0.5f, 0.0f,   0,0,-1,   0,1,0,1 },
+	{ -0.5f, -0.5f, 0.0f,   0,0,-1,   0,0,1,1 },
 };
 
 
@@ -234,9 +242,28 @@ void Window::Render()
 	float aspect = (float)m_width / (float)m_height; //アスペクト比
 	XMMATRIX P = XMMatrixPerspectiveFovLH(fovY, aspect, 0.1f, 100.0f);
 
-	//定数バッファをVSセット
-	ID3D11Buffer* cbs[] = { m_cb.Get() };
-	m_context->VSSetConstantBuffers(0, 1, cbs);
+	//ViewProjの作成
+	XMMATRIX VP = V * P;
+
+	//b0 Transform
+	CBTransform cbT{};
+	XMStoreFloat4x4(&cbT.viewProj, XMMatrixTranspose(VP));;
+	m_context->UpdateSubresource(m_cbTransform.Get(), 0, nullptr, &cbT, 0, 0);
+
+	//b1 Light
+	CBLight cbL{};
+	cbL.lightDir = XMFLOAT3(0.0f, 0.0f, 1.0f);
+	cbL.lightColor = XMFLOAT4(1, 1, 1, 1);
+	cbL.ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1);
+	m_context->UpdateSubresource(m_cbLight.Get(), 0, nullptr, &cbL, 0, 0);
+
+	// VS/PS にセット
+	ID3D11Buffer* vsCBs[] = { m_cbTransform.Get() };
+	m_context->VSSetConstantBuffers(0, 1, vsCBs);
+
+	ID3D11Buffer* psCBs[] = { m_cbLight.Get() };
+	m_context->PSSetConstantBuffers(1, 1, psCBs);
+
 
 	//描画
 	XMMATRIX baseW = XMMatrixRotationZ(angle);
@@ -249,13 +276,6 @@ void Window::Render()
 
 bool Window::InitTriangle()
 {
-	// 1) 頂点データ
-	Vertex verts[3] =
-	{
-		{  0.0f,  0.5f, 0.0f,  1,0,0,1 },
-		{  0.5f, -0.5f, 0.0f,  0,1,0,1 },
-		{ -0.5f, -0.5f, 0.0f,  0,0,1,1 },
-	};
 
 	//シェーダーをコンパイル
 	ComPtr<ID3DBlob> vsBlob;
@@ -302,7 +322,6 @@ bool Window::InitTriangle()
 		return false;
 	}
 
-
 	//シェーダーオブジェクト作成
 	hr = m_device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, m_vs.GetAddressOf());
 	if (FAILED(hr)) return false;
@@ -310,11 +329,25 @@ bool Window::InitTriangle()
 	hr = m_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, m_ps.GetAddressOf());
 	if (FAILED(hr)) return false;
 
+	D3D11_BUFFER_DESC cbd{};
+	cbd.Usage = D3D11_USAGE_DEFAULT;
+	cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+	cbd.ByteWidth = sizeof(CBTransform);
+	hr = m_device->CreateBuffer(&cbd, nullptr, m_cbTransform.GetAddressOf());
+	if (FAILED(hr)) return false;
+
+	cbd.ByteWidth = sizeof(CBLight);
+	hr = m_device->CreateBuffer(&cbd, nullptr, m_cbLight.GetAddressOf());
+	if (FAILED(hr)) return false;
+
+
 	//Input Layer
 	D3D11_INPUT_ELEMENT_DESC layout[] =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{ "COLOR",0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+		{ "COLOR",0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
 	};
 
 	hr = m_device->CreateInputLayout(
@@ -336,14 +369,6 @@ bool Window::InitTriangle()
 	initData.pSysMem = verts;
 
 	hr = m_device->CreateBuffer(&bd, &initData, m_vb.GetAddressOf());
-	if (FAILED(hr)) return false;
-
-	D3D11_BUFFER_DESC cbd{};
-	cbd.Usage = D3D11_USAGE_DEFAULT;
-	cbd.ByteWidth = sizeof(float) * 16;
-	cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-
-	hr = m_device->CreateBuffer(&cbd, nullptr, m_cb.GetAddressOf());
 	if (FAILED(hr)) return false;
 
 	return true;
@@ -406,10 +431,10 @@ XMMATRIX Window::GetViewMatrix() const
 
 void Window::DrawTriangle(const XMMATRIX& W, const XMMATRIX& V, const XMMATRIX& P)
 {
-	XMMATRIX mvpT = XMMatrixTranspose(W * V * P);
-	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &mvpT, 0, 0);
+	CBTransform cbT{};
+	XMStoreFloat4x4(&cbT.world, XMMatrixTranspose(W));
+	XMStoreFloat4x4(&cbT.viewProj, XMMatrixTranspose(V * P));
+
+	m_context->UpdateSubresource(m_cbTransform.Get(), 0, nullptr, &cbT, 0, 0);
 	m_context->Draw(3, 0);
 }
-
-
-
