@@ -202,10 +202,15 @@ bool Window::InitD3D()
 
 void Window::Render()
 {
-	const float clearColor[4] = { 0.1f, 0.2f, 0.8f, 1.0f };
+	//カメラ更新
+	UpdateCamera();
+
+	//クリア
+	const float clearColor[4] = { 0.1f,0.2f,0.8f,1.0f };
 	m_context->ClearRenderTargetView(m_rtv.Get(), clearColor);
 	m_context->ClearDepthStencilView(m_dsv.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
+	//パイプライン設定
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 	ID3D11Buffer* vbs[] = { m_vb.Get() };
@@ -217,48 +222,27 @@ void Window::Render()
 	m_context->VSSetShader(m_vs.Get(), nullptr, 0);
 	m_context->PSSetShader(m_ps.Get(), nullptr, 0);
 
+
+	//行列
 	static float angle = 0.0f;
 	angle += 0.01f;
 
-	//Worldオブジェクトの返還
-	XMMATRIX W = XMMatrixRotationZ(angle) * XMMatrixTranslation(0.0f, 0.0f, 0.0f);
-
-	//View(カメラ)
-	XMVECTOR eye = XMVectorSet(0.0f, 0.0f, -2.0f, 1.0f); //カメラ位置
-	XMVECTOR target = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);  //見る先
-	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);  //上方向
-	XMMATRIX V = XMMatrixLookAtLH(eye, target, up);
+	XMMATRIX V = GetViewMatrix();
 
 	//プロジェクション（遠近）
 	float fovY = XM_PIDIV4; //45度
 	float aspect = (float)m_width / (float)m_height; //アスペクト比
-	float nearZ = 0.1f;
-	float farZ = 100.0f;
-	XMMATRIX P = XMMatrixPerspectiveFovLH(fovY, aspect, nearZ, farZ);
+	XMMATRIX P = XMMatrixPerspectiveFovLH(fovY, aspect, 0.1f, 100.0f);
 
-	//合成
-	XMMATRIX MVP = W * V * P;
-
-	//転置して定数バッファへ
-	XMMATRIX mvpT = XMMatrixTranspose(MVP);
-	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &mvpT, 0, 0);
-
+	//定数バッファをVSセット
 	ID3D11Buffer* cbs[] = { m_cb.Get() };
 	m_context->VSSetConstantBuffers(0, 1, cbs);
 
-	// 1枚目（奥）
-	XMMATRIX W1 = XMMatrixTranslation(-0.2f, 0.0f, 0.2f); // zを奥側（※LHなので +zが奥寄り）
-	XMMATRIX MVP1 = XMMatrixTranspose(W1 * V * P);
-	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &MVP1, 0, 0);
-	m_context->Draw(3, 0);
+	//描画
+	XMMATRIX baseW = XMMatrixRotationZ(angle);
 
-	// 2枚目（手前）
-	XMMATRIX W2 = XMMatrixTranslation(0.2f, 0.0f, 0.0f); // zを手前側
-	XMMATRIX MVP2 = XMMatrixTranspose(W2 * V * P);
-	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &MVP2, 0, 0);
-	m_context->Draw(3, 0);
-
-	m_context->Draw(3, 0);
+	DrawTriangle(baseW * XMMatrixTranslation(-0.2f, 0.0f, 0.6f), V, P);
+	DrawTriangle(baseW * XMMatrixTranslation(0.2f, 0.0f, 0.0f), V, P);
 
 	m_swapChain->Present(1, 0);
 }
@@ -363,6 +347,68 @@ bool Window::InitTriangle()
 	if (FAILED(hr)) return false;
 
 	return true;
+}
+
+void Window::UpdateCamera()
+{
+	float moveSpeed = 0.03f;
+	float rotSpeed = 0.02f;
+
+	// 回転（矢印キー）
+	if (GetAsyncKeyState(VK_LEFT) & 0x8000) m_camYaw -= rotSpeed;
+	if (GetAsyncKeyState(VK_RIGHT) & 0x8000) m_camYaw += rotSpeed;
+	if (GetAsyncKeyState(VK_UP) & 0x8000) m_camPitch += rotSpeed;
+	if (GetAsyncKeyState(VK_DOWN) & 0x8000) m_camPitch -= rotSpeed;
+
+	//pitch制限
+	const float limit = XM_PIDIV2 - 0.1f;
+	if (m_camPitch > limit) m_camPitch = limit;
+	if (m_camPitch < limit) m_camPitch = -limit;
+
+	XMVECTOR forward = XMVectorSet(
+		cosf(m_camPitch) * sinf(m_camYaw),
+		sinf(m_camPitch),
+		cosf(m_camPitch) * cosf(m_camYaw),
+		0.0f
+	);
+	forward = XMVector3Normalize(forward);
+
+	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+	XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, forward));
+
+	XMVECTOR pos = XMLoadFloat3(&m_camPos);
+
+	if (GetAsyncKeyState('W') & 0x8000) pos += forward * moveSpeed;
+	if (GetAsyncKeyState('S') & 0x8000) pos -= forward * moveSpeed;
+	if (GetAsyncKeyState('D') & 0x8000) pos += right * moveSpeed;
+	if (GetAsyncKeyState('A') & 0x8000) pos -= right * moveSpeed;
+
+	if (GetAsyncKeyState('E') & 0x8000) pos += up * moveSpeed;
+	if (GetAsyncKeyState('Q') & 0x8000) pos -= up * moveSpeed;
+
+	XMStoreFloat3(&m_camPos, pos);
+}
+
+XMMATRIX Window::GetViewMatrix() const
+{
+	XMVECTOR pos = XMLoadFloat3(&m_camPos);
+
+	XMVECTOR forward = XMVector3Normalize(XMVectorSet(
+		cosf(m_camPitch) * sinf(m_camYaw),
+		sinf(m_camPitch),
+		cosf(m_camPitch) * cosf(m_camYaw),
+		0.0f));
+
+	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+
+	return XMMatrixLookToLH(pos, forward, up);
+}
+
+void Window::DrawTriangle(const XMMATRIX& W, const XMMATRIX& V, const XMMATRIX& P)
+{
+	XMMATRIX mvpT = XMMatrixTranspose(W * V * P);
+	m_context->UpdateSubresource(m_cb.Get(), 0, nullptr, &mvpT, 0, 0);
+	m_context->Draw(3, 0);
 }
 
 

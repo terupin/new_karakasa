@@ -5,8 +5,11 @@
 #include <cstdint>
 #include<wrl/client.h>
 #include<d3dcompiler.h>
+#include<DirectXMath.h>
 
 #pragma comment(lib,"d3dcompiler.lib")
+
+using namespace DirectX;
 
 class Window {
 public:
@@ -18,6 +21,10 @@ private:
 	HWND m_hwnd = nullptr;
 	int m_width = 0;
 	int m_height = 0;
+
+	XMFLOAT3 m_camPos = { 0.0f,0.0f,-2.0f };
+	float m_camYaw = 0.0f;
+	float m_camPitch = 0.0f;
 
 	Microsoft::WRL::ComPtr<ID3D11Device> m_device = nullptr;
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context = nullptr;
@@ -36,4 +43,7 @@ private:
 	bool InitD3D();
 	void Render();
 	bool InitTriangle();
+	void UpdateCamera();
+	XMMATRIX GetViewMatrix() const;
+	void DrawTriangle(const XMMATRIX& W, const XMMATRIX& V, const XMMATRIX& P);
 };
