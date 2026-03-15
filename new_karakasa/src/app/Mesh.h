@@ -14,6 +14,7 @@ public:
 	};
 
 	bool CreateTriangle(ID3D11Device* device);
+	bool CreateBox(ID3D11Device* device);
 	void Draw(ID3D11DeviceContext* context)const;
 
 private:

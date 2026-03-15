@@ -190,11 +190,11 @@ bool Window::InitD3D()
 	if (!InitResources())
 		return false;
 
-	m_obj1.mesh = &m_mesh;
-	m_obj2.mesh = &m_mesh;
+	m_obj1.mesh = &m_triangleMesh;
+	m_obj2.mesh = &m_boxMesh;
 
-	m_obj1.transform.position = { -0.2f, 0.0f, 0.6f };
-	m_obj2.transform.position = { 0.2f, 0.0f, 0.0f };
+	m_obj1.transform.position = { -0.8f, 0.0f, 0.6f };
+	m_obj2.transform.position = { 0.8f, 0.0f, 0.0f };
 
 	return true;
 }
@@ -342,7 +342,10 @@ bool Window::InitResources()
 	);
 	if (FAILED(hr)) return false;
 
-	if (!m_mesh.CreateTriangle(m_device.Get()))
+	if (!m_triangleMesh.CreateTriangle(m_device.Get()))
+		return false;
+
+	if (!m_boxMesh.CreateBox(m_device.Get()))
 		return false;
 
 	return true;

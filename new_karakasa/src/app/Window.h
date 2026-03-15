@@ -52,7 +52,8 @@ private:
 	int m_height = 0;
 
 	Camera m_camera;
-	Mesh m_mesh;
+	Mesh m_triangleMesh;
+	Mesh m_boxMesh;
 
 	RenderItem m_obj1;
 	RenderItem m_obj2;
