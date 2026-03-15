@@ -8,21 +8,6 @@
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 
-struct Vertex
-{
-	float x, y, z; //Position
-	float nx, ny, nz; //Normal
-	float r, g, b, a; //Color
-};
-
-Vertex verts[3] =
-{
-	{  0.0f,  0.5f, 0.0f,   0,0,-1,   1,0,0,1 },
-	{  0.5f, -0.5f, 0.0f,   0,0,-1,   0,1,0,1 },
-	{ -0.5f, -0.5f, 0.0f,   0,0,-1,   0,0,1,1 },
-};
-
-
 bool Window::Create(HINSTANCE hInst, int width, int height, const wchar_t* title)
 {
 	m_width = width;
@@ -202,8 +187,14 @@ bool Window::InitD3D()
 	vp.MaxDepth = 1.0f;
 	m_context->RSSetViewports(1, &vp);
 
-	if (!InitTriangle())
+	if (!InitResources())
 		return false;
+
+	m_obj1.mesh = &m_mesh;
+	m_obj2.mesh = &m_mesh;
+
+	m_obj1.transform.position = { -0.2f, 0.0f, 0.6f };
+	m_obj2.transform.position = { 0.2f, 0.0f, 0.0f };
 
 	return true;
 }
@@ -211,7 +202,7 @@ bool Window::InitD3D()
 void Window::Render()
 {
 	//カメラ更新
-	UpdateCamera();
+	m_camera.Update();
 
 	//クリア
 	const float clearColor[4] = { 0.1f,0.2f,0.8f,1.0f };
@@ -219,11 +210,6 @@ void Window::Render()
 	m_context->ClearDepthStencilView(m_dsv.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	//パイプライン設定
-	UINT stride = sizeof(Vertex);
-	UINT offset = 0;
-	ID3D11Buffer* vbs[] = { m_vb.Get() };
-
-	m_context->IASetVertexBuffers(0, 1, vbs, &stride, &offset);
 	m_context->IASetInputLayout(m_inputLayout.Get());
 	m_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -235,22 +221,19 @@ void Window::Render()
 	static float angle = 0.0f;
 	angle += 0.01f;
 
-	XMMATRIX V = GetViewMatrix();
+	XMMATRIX V = m_camera.GetViewMatrix();
 
 	//プロジェクション（遠近）
 	float fovY = XM_PIDIV4; //45度
 	float aspect = (float)m_width / (float)m_height; //アスペクト比
 	XMMATRIX P = XMMatrixPerspectiveFovLH(fovY, aspect, 0.1f, 100.0f);
 
-	//ViewProjの作成
-	XMMATRIX VP = V * P;
-
 	//b1 Light
 	CBLight cbL{};
 	cbL.lightDir = XMFLOAT3(0.3f, -0.6f, 1.0f);
 	cbL.lightColor = XMFLOAT4(1, 1, 1, 1);
 	cbL.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
-	cbL.cameraPos = m_camPos;
+	cbL.cameraPos = m_camera.GetPosition();
 	cbL.specStrength = 4.0f;
 	cbL.shininess = 8.0f;
 	m_context->UpdateSubresource(m_cbLight.Get(), 0, nullptr, &cbL, 0, 0);
@@ -265,16 +248,16 @@ void Window::Render()
 	ID3D11Buffer* psCBs0[] = { m_cbTransform.Get() };
 	m_context->PSSetConstantBuffers(0, 1, psCBs0);
 
-	//描画
-	XMMATRIX baseW = XMMatrixRotationZ(angle);
+	m_obj1.transform.rotation.y = angle;
+	m_obj2.transform.rotation.y = angle;
 
-	DrawTriangle(baseW * XMMatrixTranslation(-0.2f, 0.0f, 0.6f), V, P);
-	DrawTriangle(baseW * XMMatrixTranslation(0.2f, 0.0f, 0.0f), V, P);
+	DrawRenderItem(m_obj1, V, P);
+	DrawRenderItem(m_obj2, V, P);
 
 	m_swapChain->Present(1, 0);
 }
 
-bool Window::InitTriangle()
+bool Window::InitResources()
 {
 
 	//シェーダーをコンパイル
@@ -359,82 +342,18 @@ bool Window::InitTriangle()
 	);
 	if (FAILED(hr)) return false;
 
-	//VertexBufferの作成
-	D3D11_BUFFER_DESC bd = {};
-	bd.Usage = D3D11_USAGE_DEFAULT;
-	bd.ByteWidth = sizeof(verts);
-	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-
-	D3D11_SUBRESOURCE_DATA initData = {};
-	initData.pSysMem = verts;
-
-	hr = m_device->CreateBuffer(&bd, &initData, m_vb.GetAddressOf());
-	if (FAILED(hr)) return false;
+	if (!m_mesh.CreateTriangle(m_device.Get()))
+		return false;
 
 	return true;
 }
 
-void Window::UpdateCamera()
-{
-	float moveSpeed = 0.03f;
-	float rotSpeed = 0.02f;
-
-	// 回転（矢印キー）
-	if (GetAsyncKeyState(VK_LEFT) & 0x8000) m_camYaw -= rotSpeed;
-	if (GetAsyncKeyState(VK_RIGHT) & 0x8000) m_camYaw += rotSpeed;
-	if (GetAsyncKeyState(VK_UP) & 0x8000) m_camPitch += rotSpeed;
-	if (GetAsyncKeyState(VK_DOWN) & 0x8000) m_camPitch -= rotSpeed;
-
-	//pitch制限
-	const float limit = XM_PIDIV2 - 0.1f;
-	if (m_camPitch > limit) m_camPitch = limit;
-	if (m_camPitch < limit) m_camPitch = -limit;
-
-	XMVECTOR forward = XMVectorSet(
-		cosf(m_camPitch) * sinf(m_camYaw),
-		sinf(m_camPitch),
-		cosf(m_camPitch) * cosf(m_camYaw),
-		0.0f
-	);
-	forward = XMVector3Normalize(forward);
-
-	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
-	XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, forward));
-
-	XMVECTOR pos = XMLoadFloat3(&m_camPos);
-
-	if (GetAsyncKeyState('W') & 0x8000) pos += forward * moveSpeed;
-	if (GetAsyncKeyState('S') & 0x8000) pos -= forward * moveSpeed;
-	if (GetAsyncKeyState('D') & 0x8000) pos += right * moveSpeed;
-	if (GetAsyncKeyState('A') & 0x8000) pos -= right * moveSpeed;
-
-	if (GetAsyncKeyState('E') & 0x8000) pos += up * moveSpeed;
-	if (GetAsyncKeyState('Q') & 0x8000) pos -= up * moveSpeed;
-
-	XMStoreFloat3(&m_camPos, pos);
-}
-
-XMMATRIX Window::GetViewMatrix() const
-{
-	XMVECTOR pos = XMLoadFloat3(&m_camPos);
-
-	XMVECTOR forward = XMVector3Normalize(XMVectorSet(
-		cosf(m_camPitch) * sinf(m_camYaw),
-		sinf(m_camPitch),
-		cosf(m_camPitch) * cosf(m_camYaw),
-		0.0f));
-
-	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
-
-	return XMMatrixLookToLH(pos, forward, up);
-}
-
-void Window::DrawTriangle(const XMMATRIX& W, const XMMATRIX& V, const XMMATRIX& P)
+void Window::DrawRenderItem(const RenderItem& item, const DirectX::XMMATRIX& V, const DirectX::XMMATRIX& P)
 {
 	CBTransform cbT{};
-	XMStoreFloat4x4(&cbT.world, XMMatrixTranspose(W));
+	XMStoreFloat4x4(&cbT.world, XMMatrixTranspose(item.transform.GetMatrix()));
 	XMStoreFloat4x4(&cbT.viewProj, XMMatrixTranspose(V * P));
 
 	m_context->UpdateSubresource(m_cbTransform.Get(), 0, nullptr, &cbT, 0, 0);
-	m_context->Draw(3, 0);
+	item.mesh->Draw(m_context.Get());
 }

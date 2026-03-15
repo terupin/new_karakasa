@@ -19,10 +19,16 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\app\Camera.cpp" />
     <ClCompile Include="src\app\main.cpp" />
+    <ClCompile Include="src\app\Mesh.cpp" />
+    <ClCompile Include="src\app\Transform.cpp" />
     <ClCompile Include="src\app\Window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\app\Camera.h" />
+    <ClInclude Include="src\app\Mesh.h" />
+    <ClInclude Include="src\app\Transform.h" />
     <ClInclude Include="src\app\Window.h" />
   </ItemGroup>
   <ItemGroup>
