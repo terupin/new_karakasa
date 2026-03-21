@@ -190,11 +190,7 @@ bool Window::InitD3D()
 	if (!InitResources())
 		return false;
 
-	m_obj1.mesh = &m_triangleMesh;
-	m_obj2.mesh = &m_boxMesh;
-
-	m_obj1.transform.position = { -0.8f, 0.0f, 0.6f };
-	m_obj2.transform.position = { 0.8f, 0.0f, 0.0f };
+	CreateScene();
 
 	return true;
 }
@@ -216,11 +212,6 @@ void Window::Render()
 	m_context->VSSetShader(m_vs.Get(), nullptr, 0);
 	m_context->PSSetShader(m_ps.Get(), nullptr, 0);
 
-
-	//行列
-	static float angle = 0.0f;
-	angle += 0.01f;
-
 	XMMATRIX V = m_camera.GetViewMatrix();
 
 	//プロジェクション（遠近）
@@ -230,12 +221,12 @@ void Window::Render()
 
 	//b1 Light
 	CBLight cbL{};
-	cbL.lightDir = XMFLOAT3(0.3f, -0.6f, 1.0f);
-	cbL.lightColor = XMFLOAT4(1, 1, 1, 1);
-	cbL.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
+	cbL.lightDir = DirectX::XMFLOAT3(0.3f, -1.0f, 0.5f);
+	cbL.lightColor = DirectX::XMFLOAT4(1.2f, 1.2f, 1.2f, 1.0f);
+	cbL.ambient = DirectX::XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
 	cbL.cameraPos = m_camera.GetPosition();
-	cbL.specStrength = 4.0f;
-	cbL.shininess = 8.0f;
+	cbL.specStrength = 2.0f;
+	cbL.shininess = 16.0f;
 	m_context->UpdateSubresource(m_cbLight.Get(), 0, nullptr, &cbL, 0, 0);
 
 	// VS/PS にセット
@@ -248,11 +239,17 @@ void Window::Render()
 	ID3D11Buffer* psCBs0[] = { m_cbTransform.Get() };
 	m_context->PSSetConstantBuffers(0, 1, psCBs0);
 
-	m_obj1.transform.rotation.y = angle;
-	m_obj2.transform.rotation.y = angle;
+	static float angle = 0.0f;
+	angle += 0.01f;
 
-	DrawRenderItem(m_obj1, V, P);
-	DrawRenderItem(m_obj2, V, P);
+	if (m_renderItems.size() > 0) m_renderItems[0].transform.rotation.y = angle;
+	if (m_renderItems.size() > 1) m_renderItems[1].transform.rotation.y = angle;
+	if (m_renderItems.size() > 3) m_renderItems[3].transform.rotation.y = angle;
+
+	for (const auto& item : m_renderItems)
+	{
+		DrawRenderItem(item, V, P);
+	}
 
 	m_swapChain->Present(1, 0);
 }
@@ -349,6 +346,33 @@ bool Window::InitResources()
 		return false;
 
 	return true;
+}
+
+void Window::CreateScene()
+{
+	m_renderItems.clear();
+
+	RenderItem obj1;
+	obj1.mesh = &m_triangleMesh;
+	obj1.transform.position = { -0.8f, 0.0f, 0.6f };
+	m_renderItems.push_back(obj1);
+
+	RenderItem obj2;
+	obj2.mesh = &m_boxMesh;
+	obj2.transform.position = { 0.8f, 0.0f, 0.0f };
+	m_renderItems.push_back(obj2);
+
+	RenderItem ground;
+	ground.mesh = &m_boxMesh;
+	ground.transform.position = { 0.0f, -1.0f, 0.0f };
+	ground.transform.scale = { 10.0f, 0.2f, 10.0f };
+	m_renderItems.push_back(ground);
+
+	RenderItem player;
+	player.mesh = &m_boxMesh;
+	player.transform.position = { 0.0f, 0.5f, 0.0f };
+	player.transform.scale = { 1.0f, 2.0f, 1.0f };
+	m_renderItems.push_back(player);
 }
 
 void Window::DrawRenderItem(const RenderItem& item, const DirectX::XMMATRIX& V, const DirectX::XMMATRIX& P)

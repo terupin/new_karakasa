@@ -44,6 +44,9 @@
     <ClInclude Include="src\app\Mesh.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\RenderItem.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="shaders\Basic.hlsl" />

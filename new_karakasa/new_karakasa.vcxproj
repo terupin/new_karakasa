@@ -28,6 +28,7 @@
   <ItemGroup>
     <ClInclude Include="src\app\Camera.h" />
     <ClInclude Include="src\app\Mesh.h" />
+    <ClInclude Include="src\app\RenderItem.h" />
     <ClInclude Include="src\app\Transform.h" />
     <ClInclude Include="src\app\Window.h" />
   </ItemGroup>
