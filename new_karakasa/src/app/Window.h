@@ -5,6 +5,8 @@
 #include "Transform.h"
 #include "Mesh.h"
 #include "RenderItem.h"
+#include "Input.h"
+#include "Player.h"
 #include <d3d11.h>
 #include <cstdint>
 #include <wrl/client.h>
@@ -36,6 +38,14 @@ struct CBLight
 	DirectX::XMFLOAT3 pad1; //16ÉoÉCÉgã´äEçáÇÌÇπ
 };
 
+struct CBMaterial
+{
+	DirectX::XMFLOAT4 baseColor;
+	float specStrength;
+	float shininess;
+	DirectX::XMFLOAT2 pad;
+};
+
 class Window {
 public:
 	bool Create(HINSTANCE hInst, int width, int height, const wchar_t* title);
@@ -51,6 +61,8 @@ private:
 	Mesh m_triangleMesh;
 	Mesh m_boxMesh;
 
+	Player m_player;
+
 	std::vector<RenderItem> m_renderItems;
 
 	Microsoft::WRL::ComPtr<ID3D11Device> m_device = nullptr;
@@ -64,6 +76,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_dsv;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbTransform;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbLight;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbMaterial;
 
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 

@@ -1,4 +1,5 @@
 #include "Camera.h"
+#include "Input.h"
 #include <Windows.h>
 
 using namespace DirectX;
@@ -8,10 +9,10 @@ void Camera::Update()
 	float moveSpeed = 0.03f;
 	float rotSpeed = 0.02f;
 
-	if (GetAsyncKeyState(VK_LEFT) & 0x8000) m_yaw -= rotSpeed;
-	if (GetAsyncKeyState(VK_RIGHT) & 0x8000) m_yaw += rotSpeed;
-	if (GetAsyncKeyState(VK_UP) & 0x8000) m_pitch += rotSpeed;
-	if (GetAsyncKeyState(VK_DOWN) & 0x8000) m_pitch -= rotSpeed;
+	if (Input::GetKey(VK_LEFT)) m_yaw -= rotSpeed;
+	if (Input::GetKey(VK_RIGHT)) m_yaw += rotSpeed;
+	if (Input::GetKey(VK_UP)) m_pitch += rotSpeed;
+	if (Input::GetKey(VK_DOWN)) m_pitch -= rotSpeed;
 
 	const float limit = XM_PIDIV2 - 0.1f;
 	if (m_pitch > limit) m_pitch = limit;
@@ -31,13 +32,13 @@ void Camera::Update()
 
 	XMVECTOR pos = XMLoadFloat3(&m_position);
 
-	if (GetAsyncKeyState('W') & 0x8000) pos += forward * moveSpeed;
-	if (GetAsyncKeyState('S') & 0x8000) pos -= forward * moveSpeed;
-	if (GetAsyncKeyState('D') & 0x8000) pos += right * moveSpeed;
-	if (GetAsyncKeyState('A') & 0x8000) pos -= right * moveSpeed;
+	if (Input::GetKey('W')) pos += forward * moveSpeed;
+	if (Input::GetKey('S')) pos -= forward * moveSpeed;
+	if (Input::GetKey('D')) pos += right * moveSpeed;
+	if (Input::GetKey('A')) pos -= right * moveSpeed;
 
-	if (GetAsyncKeyState('E') & 0x8000) pos += up * moveSpeed;
-	if (GetAsyncKeyState('Q') & 0x8000) pos -= up * moveSpeed;
+	if (Input::GetKey('E')) pos += up * moveSpeed;
+	if (Input::GetKey('Q')) pos -= up * moveSpeed;
 
 	XMStoreFloat3(&m_position, pos);
 }

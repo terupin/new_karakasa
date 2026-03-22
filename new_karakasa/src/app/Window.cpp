@@ -1,4 +1,5 @@
 #include "Window.h"
+#include "Input.h"
 #include <d3d11.h>
 #include <DirectXMath.h>
 
@@ -197,6 +198,12 @@ bool Window::InitD3D()
 
 void Window::Render()
 {
+	//入力更新
+	Input::Update();
+
+	float dt = 1.0f; //とりあえずの固定
+	m_player.Update(dt);
+
 	//カメラ更新
 	m_camera.Update();
 
@@ -225,19 +232,19 @@ void Window::Render()
 	cbL.lightColor = DirectX::XMFLOAT4(1.2f, 1.2f, 1.2f, 1.0f);
 	cbL.ambient = DirectX::XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
 	cbL.cameraPos = m_camera.GetPosition();
-	cbL.specStrength = 2.0f;
-	cbL.shininess = 16.0f;
 	m_context->UpdateSubresource(m_cbLight.Get(), 0, nullptr, &cbL, 0, 0);
 
 	// VS/PS にセット
 	ID3D11Buffer* vsCBs[] = { m_cbTransform.Get() };
 	m_context->VSSetConstantBuffers(0, 1, vsCBs);
 
-	ID3D11Buffer* psCBs[] = { m_cbLight.Get() };
-	m_context->PSSetConstantBuffers(1, 1, psCBs);
-
-	ID3D11Buffer* psCBs0[] = { m_cbTransform.Get() };
-	m_context->PSSetConstantBuffers(0, 1, psCBs0);
+	ID3D11Buffer* psCBs[] =
+	{
+		m_cbTransform.Get(),
+		m_cbLight.Get(),
+		m_cbMaterial.Get()
+	};
+	m_context->PSSetConstantBuffers(0, 3, psCBs);
 
 	static float angle = 0.0f;
 	angle += 0.01f;
@@ -250,6 +257,9 @@ void Window::Render()
 	{
 		DrawRenderItem(item, V, P);
 	}
+
+	//Playerは別描画
+	DrawRenderItem(m_player.renderItem, V, P);
 
 	m_swapChain->Present(1, 0);
 }
@@ -321,6 +331,10 @@ bool Window::InitResources()
 	hr = m_device->CreateBuffer(&cbd, nullptr, m_cbLight.GetAddressOf());
 	if (FAILED(hr)) return false;
 
+	cbd.ByteWidth = sizeof(CBMaterial);
+	hr = m_device->CreateBuffer(&cbd, nullptr, m_cbMaterial.GetAddressOf());
+	if (FAILED(hr)) return false;
+
 
 	//Input Layer
 	D3D11_INPUT_ELEMENT_DESC layout[] =
@@ -355,32 +369,53 @@ void Window::CreateScene()
 	RenderItem obj1;
 	obj1.mesh = &m_triangleMesh;
 	obj1.transform.position = { -0.8f, 0.0f, 0.6f };
+	obj1.material.baseColor = { 1.0f, 0.3f, 0.3f, 1.0f };
+	obj1.material.specStrength = 1.0f;
+	obj1.material.shininess = 8.0f;
 	m_renderItems.push_back(obj1);
 
 	RenderItem obj2;
 	obj2.mesh = &m_boxMesh;
 	obj2.transform.position = { 0.8f, 0.0f, 0.0f };
+	obj2.material.baseColor = { 0.3f, 0.8f, 1.0f, 1.0f };
+	obj2.material.specStrength = 2.0f;
+	obj2.material.shininess = 32.0f;
 	m_renderItems.push_back(obj2);
 
 	RenderItem ground;
 	ground.mesh = &m_boxMesh;
 	ground.transform.position = { 0.0f, -1.0f, 0.0f };
 	ground.transform.scale = { 10.0f, 0.2f, 10.0f };
+	ground.material.baseColor = { 0.4f, 0.8f, 0.4f, 1.0f };
+	ground.material.specStrength = 0.2f;
+	ground.material.shininess = 4.0f;
 	m_renderItems.push_back(ground);
 
 	RenderItem player;
-	player.mesh = &m_boxMesh;
-	player.transform.position = { 0.0f, 0.5f, 0.0f };
-	player.transform.scale = { 1.0f, 2.0f, 1.0f };
+	m_player.renderItem.mesh = &m_boxMesh;
+	m_player.renderItem.transform.position = { 0.0f, 0.5f, 0.0f };
+	m_player.renderItem.transform.scale = { 1.0f, 2.0f, 1.0f };
+	m_player.renderItem.material.baseColor = { 1.0f, 1.0f, 0.3f, 1.0f };
+	m_player.renderItem.material.specStrength = 2.5f;
+	m_player.renderItem.material.shininess = 64.0f;
 	m_renderItems.push_back(player);
 }
 
 void Window::DrawRenderItem(const RenderItem& item, const DirectX::XMMATRIX& V, const DirectX::XMMATRIX& P)
 {
+	if (!item.visible || item.mesh == nullptr)
+		return;
+
 	CBTransform cbT{};
 	XMStoreFloat4x4(&cbT.world, XMMatrixTranspose(item.transform.GetMatrix()));
 	XMStoreFloat4x4(&cbT.viewProj, XMMatrixTranspose(V * P));
-
 	m_context->UpdateSubresource(m_cbTransform.Get(), 0, nullptr, &cbT, 0, 0);
+
+	CBMaterial cbM{};
+	cbM.baseColor = item.material.baseColor;
+	cbM.specStrength = item.material.specStrength;
+	cbM.shininess = item.material.shininess;
+	m_context->UpdateSubresource(m_cbMaterial.Get(), 0, nullptr, &cbM, 0, 0);
+
 	item.mesh->Draw(m_context.Get());
 }
