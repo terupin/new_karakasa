@@ -3,16 +3,37 @@
 
 using namespace DirectX;
 
-void Player::Update(float dt)
+void Player::Update(float dt, const Camera& cam)
 {
-	float moveSpeed = 3.0f;
 
-	if (Input::GetKey('A'))
-		renderItem.transform.position.x -= moveSpeed * dt;
+}
 
-	if (Input::GetKey('D'))
-		renderItem.transform.position.x += moveSpeed * dt;
+DirectX::XMFLOAT3 Player::GetMoveDelta(float dt, const Camera& cam) const
+{
+	float moveSpeed = 15.0f;
 
+	XMVECTOR forward = cam.GetForward();
+	XMVECTOR right = cam.GetRight();
+
+	XMVECTOR move = XMVectorZero();
+
+	if (Input::GetKey('W')) move += forward;
+	if (Input::GetKey('S')) move -= forward;
+	if (Input::GetKey('D')) move += right;
+	if (Input::GetKey('A')) move -= right;
+
+	if (!XMVector3Equal(move, XMVectorZero()))
+	{
+		move = XMVector3Normalize(move) * moveSpeed * dt;
+	}
+
+	XMFLOAT3 delta{};
+	XMStoreFloat3(&delta, move);
+	return delta;
+}
+
+void Player::UpdateVertical(float dt)
+{
 	//ジャンプ
 	if (Input::GetKeyDown(VK_SPACE) && onGround)
 	{
@@ -22,14 +43,5 @@ void Player::Update(float dt)
 
 	//重力
 	velocity.y -= 9.8f * dt;
-
-	renderItem.transform.position.y += velocity.y + dt;
-
-	// 仮の地面
-	if (renderItem.transform.position.y < 0.5f)
-	{
-		renderItem.transform.position.y = 0.5f;
-		velocity.y = 0.0f;
-		onGround = true;
-	}
+	renderItem.transform.position.y += velocity.y * dt;
 }

@@ -9,4 +9,5 @@ struct RenderItem
 	Transform transform;
 	Material material;
 	bool visible = true;
+	bool solid = false;
 };

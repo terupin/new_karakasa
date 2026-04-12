@@ -1,5 +1,6 @@
 #pragma once
 #include "RenderItem.h"
+#include "Camera.h"
 #include <DirectXMath.h>
 
 class Player
@@ -10,6 +11,9 @@ public:
 
 	bool onGround = false;
 
-	void Update(float dt);
+	void Update(float dt, const Camera& cam);
+	DirectX::XMFLOAT3 GetMoveDelta(float dt, const Camera& cam) const;
+	void UpdateVertical(float dt);
+
 };
 

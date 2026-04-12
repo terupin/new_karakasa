@@ -1,13 +1,33 @@
 #include "Window.h"
 #include "Input.h"
+#include "AABB.h"
 #include <d3d11.h>
 #include <DirectXMath.h>
+#include <cfloat>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
+
+static bool CheckHorizontalHit(const RenderItem& playerItem, const std::vector<RenderItem>& items)
+{
+	AABB playerBox = MakeAABB(playerItem.transform);
+
+	for (const auto& item : items)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+
+		if (Intersects(playerBox, itemBox))
+			return true;
+	}
+
+	return false;
+}
 
 bool Window::Create(HINSTANCE hInst, int width, int height, const wchar_t* title)
 {
@@ -201,11 +221,107 @@ void Window::Render()
 	//入力更新
 	Input::Update();
 
-	float dt = 1.0f; //とりあえずの固定
-	m_player.Update(dt);
+	float dt = 1.0f / 60.0f; //とりあえずの固定
 
-	//カメラ更新
-	m_camera.Update();
+	//カメラ回転
+	m_camera.UpdateRotation();
+
+	//横移動を取得
+	XMFLOAT3 moveDelta = m_player.GetMoveDelta(dt, m_camera);
+
+	//移動方向へプレイヤーの向きを向ける
+	if (moveDelta.x != 0.0f || moveDelta.z != 0.0f)
+	{
+		float angle = atan2f(moveDelta.x, moveDelta.z); //atan2f 座標から角度をもとめる　戻り値はラジアン
+		m_player.renderItem.transform.rotation.y = angle;
+	}
+
+	//X方向移動と衝突判定
+	float oldX = m_player.renderItem.transform.position.x;
+	m_player.renderItem.transform.position.x += moveDelta.x;
+
+	AABB playerBox = MakeAABB(m_player.renderItem.transform);
+
+	for (const auto& item : m_renderItems)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+		if (Intersects(playerBox, itemBox))
+		{
+			m_player.renderItem.transform.position.x = oldX;
+			break;
+		}
+	}
+
+	//Z方向移動と衝突判定
+	float oldZ = m_player.renderItem.transform.position.z;
+	m_player.renderItem.transform.position.z += moveDelta.z;
+
+	playerBox = MakeAABB(m_player.renderItem.transform);
+
+	for (const auto& item : m_renderItems)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+
+		if (Intersects(playerBox, itemBox))
+		{
+			m_player.renderItem.transform.position.z = oldZ;
+			break;
+		}
+	}
+
+	//縦移動
+	XMFLOAT3 prevPos = m_player.renderItem.transform.position;
+	m_player.UpdateVertical(dt);
+
+	//着地配置
+	bool landed = false;
+	float bestGroundTop = -FLT_MAX; //一番大きい値を探す(FLT_MAXはfloatで一番大きな値)
+
+	playerBox = MakeAABB(m_player.renderItem.transform);
+
+	float playerHalfY = m_player.renderItem.transform.scale.y * 0.5;
+	float prevBottom = prevPos.y - playerHalfY;
+	float currBottom = m_player.renderItem.transform.position.y - playerHalfY;
+
+	bool falling = (m_player.velocity.y <= 0.0f);
+
+	for (const auto& item : m_renderItems)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+		float groundTop = itemBox.max.y;
+		bool overlapXZ = OverlapsXZ(playerBox, itemBox);
+
+		if (falling && overlapXZ && prevBottom >= groundTop && currBottom <= groundTop)
+		{
+			if (groundTop > bestGroundTop)
+			{
+				bestGroundTop = groundTop;
+				landed = true;
+			}
+		}
+	}
+
+	if (landed)
+	{
+		m_player.renderItem.transform.position.y = bestGroundTop + playerHalfY;
+		m_player.velocity.y = 0.0f;
+	}
+
+	m_player.onGround = landed;
+
+	//カメラ追従
+	XMFLOAT3 target = m_player.renderItem.transform.position;
+	target.y += 1.0f;
+	m_camera.Follow(target, 6.0f, 2.0f);
 
 	//クリア
 	const float clearColor[4] = { 0.1f,0.2f,0.8f,1.0f };
@@ -251,7 +367,6 @@ void Window::Render()
 
 	if (m_renderItems.size() > 0) m_renderItems[0].transform.rotation.y = angle;
 	if (m_renderItems.size() > 1) m_renderItems[1].transform.rotation.y = angle;
-	if (m_renderItems.size() > 3) m_renderItems[3].transform.rotation.y = angle;
 
 	for (const auto& item : m_renderItems)
 	{
@@ -341,7 +456,6 @@ bool Window::InitResources()
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{ "COLOR",0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
 	};
 
 	hr = m_device->CreateInputLayout(
@@ -372,6 +486,7 @@ void Window::CreateScene()
 	obj1.material.baseColor = { 1.0f, 0.3f, 0.3f, 1.0f };
 	obj1.material.specStrength = 1.0f;
 	obj1.material.shininess = 8.0f;
+	obj1.solid = false;
 	m_renderItems.push_back(obj1);
 
 	RenderItem obj2;
@@ -380,6 +495,7 @@ void Window::CreateScene()
 	obj2.material.baseColor = { 0.3f, 0.8f, 1.0f, 1.0f };
 	obj2.material.specStrength = 2.0f;
 	obj2.material.shininess = 32.0f;
+	obj2.solid = true;
 	m_renderItems.push_back(obj2);
 
 	RenderItem ground;
@@ -389,16 +505,16 @@ void Window::CreateScene()
 	ground.material.baseColor = { 0.4f, 0.8f, 0.4f, 1.0f };
 	ground.material.specStrength = 0.2f;
 	ground.material.shininess = 4.0f;
+	ground.solid = true;
 	m_renderItems.push_back(ground);
 
-	RenderItem player;
 	m_player.renderItem.mesh = &m_boxMesh;
 	m_player.renderItem.transform.position = { 0.0f, 0.5f, 0.0f };
 	m_player.renderItem.transform.scale = { 1.0f, 2.0f, 1.0f };
 	m_player.renderItem.material.baseColor = { 1.0f, 1.0f, 0.3f, 1.0f };
 	m_player.renderItem.material.specStrength = 2.5f;
 	m_player.renderItem.material.shininess = 64.0f;
-	m_renderItems.push_back(player);
+
 }
 
 void Window::DrawRenderItem(const RenderItem& item, const DirectX::XMMATRIX& V, const DirectX::XMMATRIX& P)

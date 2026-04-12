@@ -4,9 +4,8 @@
 
 using namespace DirectX;
 
-void Camera::Update()
+void Camera::UpdateRotation()
 {
-	float moveSpeed = 0.03f;
 	float rotSpeed = 0.02f;
 
 	if (Input::GetKey(VK_LEFT)) m_yaw -= rotSpeed;
@@ -18,29 +17,16 @@ void Camera::Update()
 	if (m_pitch > limit) m_pitch = limit;
 	if (m_pitch < -limit) m_pitch = -limit;
 
-	XMVECTOR forward = XMVectorSet(
-		cosf(m_pitch) * sinf(m_yaw),
-		sinf(m_pitch),
-		cosf(m_pitch) * cosf(m_yaw),
-		0.0f
-	);
+}
 
-	forward = XMVector3Normalize(forward);
+void Camera::Follow(const DirectX::XMFLOAT3& target, float distance, float height)
+{
+	float x = target.x - cosf(m_pitch) * sinf(m_yaw) * distance;
+	float y = target.y - sinf(m_pitch) * distance + height;
+	float z = target.z - cosf(m_pitch) * cosf(m_yaw) * distance;
 
-	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
-	XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, forward));
+	m_position = { x,y,z };
 
-	XMVECTOR pos = XMLoadFloat3(&m_position);
-
-	if (Input::GetKey('W')) pos += forward * moveSpeed;
-	if (Input::GetKey('S')) pos -= forward * moveSpeed;
-	if (Input::GetKey('D')) pos += right * moveSpeed;
-	if (Input::GetKey('A')) pos -= right * moveSpeed;
-
-	if (Input::GetKey('E')) pos += up * moveSpeed;
-	if (Input::GetKey('Q')) pos -= up * moveSpeed;
-
-	XMStoreFloat3(&m_position, pos);
 }
 
 XMMATRIX Camera::GetViewMatrix() const
@@ -59,6 +45,23 @@ XMMATRIX Camera::GetViewMatrix() const
 	return XMMatrixLookToLH(pos, forward, up);
 }
 
+DirectX::XMVECTOR Camera::GetForward() const
+{
+	return XMVector3Normalize(
+		XMVectorSet(
+			cosf(m_pitch) * sinf(m_yaw),
+			0.0f,
+			cosf(m_pitch) * cosf(m_yaw),
+			0.0f
+		)
+	);
+}
 
+DirectX::XMVECTOR Camera::GetRight() const
+{
+	XMVECTOR forward = GetForward();
+	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+	return XMVector3Normalize(XMVector3Cross(up, forward));
+}
 
 
