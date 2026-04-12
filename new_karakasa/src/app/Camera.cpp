@@ -1,45 +1,32 @@
 #include "Camera.h"
+#include "Input.h"
 #include <Windows.h>
 
 using namespace DirectX;
 
-void Camera::Update()
+void Camera::UpdateRotation()
 {
-	float moveSpeed = 0.03f;
 	float rotSpeed = 0.02f;
 
-	if (GetAsyncKeyState(VK_LEFT) & 0x8000) m_yaw -= rotSpeed;
-	if (GetAsyncKeyState(VK_RIGHT) & 0x8000) m_yaw += rotSpeed;
-	if (GetAsyncKeyState(VK_UP) & 0x8000) m_pitch += rotSpeed;
-	if (GetAsyncKeyState(VK_DOWN) & 0x8000) m_pitch -= rotSpeed;
+	if (Input::GetKey(VK_LEFT)) m_yaw -= rotSpeed;
+	if (Input::GetKey(VK_RIGHT)) m_yaw += rotSpeed;
+	if (Input::GetKey(VK_UP)) m_pitch += rotSpeed;
+	if (Input::GetKey(VK_DOWN)) m_pitch -= rotSpeed;
 
 	const float limit = XM_PIDIV2 - 0.1f;
 	if (m_pitch > limit) m_pitch = limit;
 	if (m_pitch < -limit) m_pitch = -limit;
 
-	XMVECTOR forward = XMVectorSet(
-		cosf(m_pitch) * sinf(m_yaw),
-		sinf(m_pitch),
-		cosf(m_pitch) * cosf(m_yaw),
-		0.0f
-	);
+}
 
-	forward = XMVector3Normalize(forward);
+void Camera::Follow(const DirectX::XMFLOAT3& target, float distance, float height)
+{
+	float x = target.x - cosf(m_pitch) * sinf(m_yaw) * distance;
+	float y = target.y - sinf(m_pitch) * distance + height;
+	float z = target.z - cosf(m_pitch) * cosf(m_yaw) * distance;
 
-	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
-	XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, forward));
+	m_position = { x,y,z };
 
-	XMVECTOR pos = XMLoadFloat3(&m_position);
-
-	if (GetAsyncKeyState('W') & 0x8000) pos += forward * moveSpeed;
-	if (GetAsyncKeyState('S') & 0x8000) pos -= forward * moveSpeed;
-	if (GetAsyncKeyState('D') & 0x8000) pos += right * moveSpeed;
-	if (GetAsyncKeyState('A') & 0x8000) pos -= right * moveSpeed;
-
-	if (GetAsyncKeyState('E') & 0x8000) pos += up * moveSpeed;
-	if (GetAsyncKeyState('Q') & 0x8000) pos -= up * moveSpeed;
-
-	XMStoreFloat3(&m_position, pos);
 }
 
 XMMATRIX Camera::GetViewMatrix() const
@@ -58,6 +45,23 @@ XMMATRIX Camera::GetViewMatrix() const
 	return XMMatrixLookToLH(pos, forward, up);
 }
 
+DirectX::XMVECTOR Camera::GetForward() const
+{
+	return XMVector3Normalize(
+		XMVectorSet(
+			cosf(m_pitch) * sinf(m_yaw),
+			0.0f,
+			cosf(m_pitch) * cosf(m_yaw),
+			0.0f
+		)
+	);
+}
 
+DirectX::XMVECTOR Camera::GetRight() const
+{
+	XMVECTOR forward = GetForward();
+	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
+	return XMVector3Normalize(XMVector3Cross(up, forward));
+}
 
 

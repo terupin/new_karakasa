@@ -19,15 +19,24 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\app\Player.cpp" />
     <ClCompile Include="src\app\Camera.cpp" />
+    <ClCompile Include="src\app\Input.cpp" />
     <ClCompile Include="src\app\main.cpp" />
     <ClCompile Include="src\app\Mesh.cpp" />
+    <ClCompile Include="src\app\Scene.cpp" />
     <ClCompile Include="src\app\Transform.cpp" />
     <ClCompile Include="src\app\Window.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\app\AABB.h" />
+    <ClInclude Include="src\app\Player.h" />
     <ClInclude Include="src\app\Camera.h" />
+    <ClInclude Include="src\app\Input.h" />
+    <ClInclude Include="src\app\Material.h" />
     <ClInclude Include="src\app\Mesh.h" />
+    <ClInclude Include="src\app\RenderItem.h" />
+    <ClInclude Include="src\app\Scene.h" />
     <ClInclude Include="src\app\Transform.h" />
     <ClInclude Include="src\app\Window.h" />
   </ItemGroup>

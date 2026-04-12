@@ -1,12 +1,33 @@
 #include "Window.h"
+#include "Input.h"
+#include "AABB.h"
 #include <d3d11.h>
 #include <DirectXMath.h>
+#include <cfloat>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
+
+static bool CheckHorizontalHit(const RenderItem& playerItem, const std::vector<RenderItem>& items)
+{
+	AABB playerBox = MakeAABB(playerItem.transform);
+
+	for (const auto& item : items)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+
+		if (Intersects(playerBox, itemBox))
+			return true;
+	}
+
+	return false;
+}
 
 bool Window::Create(HINSTANCE hInst, int width, int height, const wchar_t* title)
 {
@@ -190,19 +211,117 @@ bool Window::InitD3D()
 	if (!InitResources())
 		return false;
 
-	m_obj1.mesh = &m_triangleMesh;
-	m_obj2.mesh = &m_boxMesh;
-
-	m_obj1.transform.position = { -0.8f, 0.0f, 0.6f };
-	m_obj2.transform.position = { 0.8f, 0.0f, 0.0f };
+	CreateScene();
 
 	return true;
 }
 
 void Window::Render()
 {
-	//カメラ更新
-	m_camera.Update();
+	//入力更新
+	Input::Update();
+
+	float dt = 1.0f / 60.0f; //とりあえずの固定
+
+	//カメラ回転
+	m_camera.UpdateRotation();
+
+	//横移動を取得
+	XMFLOAT3 moveDelta = m_player.GetMoveDelta(dt, m_camera);
+
+	//移動方向へプレイヤーの向きを向ける
+	if (moveDelta.x != 0.0f || moveDelta.z != 0.0f)
+	{
+		float angle = atan2f(moveDelta.x, moveDelta.z); //atan2f 座標から角度をもとめる　戻り値はラジアン
+		m_player.renderItem.transform.rotation.y = angle;
+	}
+
+	//X方向移動と衝突判定
+	float oldX = m_player.renderItem.transform.position.x;
+	m_player.renderItem.transform.position.x += moveDelta.x;
+
+	AABB playerBox = MakeAABB(m_player.renderItem.transform);
+
+	for (const auto& item : m_renderItems)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+		if (Intersects(playerBox, itemBox))
+		{
+			m_player.renderItem.transform.position.x = oldX;
+			break;
+		}
+	}
+
+	//Z方向移動と衝突判定
+	float oldZ = m_player.renderItem.transform.position.z;
+	m_player.renderItem.transform.position.z += moveDelta.z;
+
+	playerBox = MakeAABB(m_player.renderItem.transform);
+
+	for (const auto& item : m_renderItems)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+
+		if (Intersects(playerBox, itemBox))
+		{
+			m_player.renderItem.transform.position.z = oldZ;
+			break;
+		}
+	}
+
+	//縦移動
+	XMFLOAT3 prevPos = m_player.renderItem.transform.position;
+	m_player.UpdateVertical(dt);
+
+	//着地配置
+	bool landed = false;
+	float bestGroundTop = -FLT_MAX; //一番大きい値を探す(FLT_MAXはfloatで一番大きな値)
+
+	playerBox = MakeAABB(m_player.renderItem.transform);
+
+	float playerHalfY = m_player.renderItem.transform.scale.y * 0.5;
+	float prevBottom = prevPos.y - playerHalfY;
+	float currBottom = m_player.renderItem.transform.position.y - playerHalfY;
+
+	bool falling = (m_player.velocity.y <= 0.0f);
+
+	for (const auto& item : m_renderItems)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+		float groundTop = itemBox.max.y;
+		bool overlapXZ = OverlapsXZ(playerBox, itemBox);
+
+		if (falling && overlapXZ && prevBottom >= groundTop && currBottom <= groundTop)
+		{
+			if (groundTop > bestGroundTop)
+			{
+				bestGroundTop = groundTop;
+				landed = true;
+			}
+		}
+	}
+
+	if (landed)
+	{
+		m_player.renderItem.transform.position.y = bestGroundTop + playerHalfY;
+		m_player.velocity.y = 0.0f;
+	}
+
+	m_player.onGround = landed;
+
+	//カメラ追従
+	XMFLOAT3 target = m_player.renderItem.transform.position;
+	target.y += 1.0f;
+	m_camera.Follow(target, 6.0f, 2.0f);
 
 	//クリア
 	const float clearColor[4] = { 0.1f,0.2f,0.8f,1.0f };
@@ -216,11 +335,6 @@ void Window::Render()
 	m_context->VSSetShader(m_vs.Get(), nullptr, 0);
 	m_context->PSSetShader(m_ps.Get(), nullptr, 0);
 
-
-	//行列
-	static float angle = 0.0f;
-	angle += 0.01f;
-
 	XMMATRIX V = m_camera.GetViewMatrix();
 
 	//プロジェクション（遠近）
@@ -230,29 +344,37 @@ void Window::Render()
 
 	//b1 Light
 	CBLight cbL{};
-	cbL.lightDir = XMFLOAT3(0.3f, -0.6f, 1.0f);
-	cbL.lightColor = XMFLOAT4(1, 1, 1, 1);
-	cbL.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
+	cbL.lightDir = DirectX::XMFLOAT3(0.3f, -1.0f, 0.5f);
+	cbL.lightColor = DirectX::XMFLOAT4(1.2f, 1.2f, 1.2f, 1.0f);
+	cbL.ambient = DirectX::XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
 	cbL.cameraPos = m_camera.GetPosition();
-	cbL.specStrength = 4.0f;
-	cbL.shininess = 8.0f;
 	m_context->UpdateSubresource(m_cbLight.Get(), 0, nullptr, &cbL, 0, 0);
 
 	// VS/PS にセット
 	ID3D11Buffer* vsCBs[] = { m_cbTransform.Get() };
 	m_context->VSSetConstantBuffers(0, 1, vsCBs);
 
-	ID3D11Buffer* psCBs[] = { m_cbLight.Get() };
-	m_context->PSSetConstantBuffers(1, 1, psCBs);
+	ID3D11Buffer* psCBs[] =
+	{
+		m_cbTransform.Get(),
+		m_cbLight.Get(),
+		m_cbMaterial.Get()
+	};
+	m_context->PSSetConstantBuffers(0, 3, psCBs);
 
-	ID3D11Buffer* psCBs0[] = { m_cbTransform.Get() };
-	m_context->PSSetConstantBuffers(0, 1, psCBs0);
+	static float angle = 0.0f;
+	angle += 0.01f;
 
-	m_obj1.transform.rotation.y = angle;
-	m_obj2.transform.rotation.y = angle;
+	if (m_renderItems.size() > 0) m_renderItems[0].transform.rotation.y = angle;
+	if (m_renderItems.size() > 1) m_renderItems[1].transform.rotation.y = angle;
 
-	DrawRenderItem(m_obj1, V, P);
-	DrawRenderItem(m_obj2, V, P);
+	for (const auto& item : m_renderItems)
+	{
+		DrawRenderItem(item, V, P);
+	}
+
+	//Playerは別描画
+	DrawRenderItem(m_player.renderItem, V, P);
 
 	m_swapChain->Present(1, 0);
 }
@@ -324,13 +446,16 @@ bool Window::InitResources()
 	hr = m_device->CreateBuffer(&cbd, nullptr, m_cbLight.GetAddressOf());
 	if (FAILED(hr)) return false;
 
+	cbd.ByteWidth = sizeof(CBMaterial);
+	hr = m_device->CreateBuffer(&cbd, nullptr, m_cbMaterial.GetAddressOf());
+	if (FAILED(hr)) return false;
+
 
 	//Input Layer
 	D3D11_INPUT_ELEMENT_DESC layout[] =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{ "COLOR",0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
 	};
 
 	hr = m_device->CreateInputLayout(
@@ -351,12 +476,62 @@ bool Window::InitResources()
 	return true;
 }
 
+void Window::CreateScene()
+{
+	m_renderItems.clear();
+
+	RenderItem obj1;
+	obj1.mesh = &m_triangleMesh;
+	obj1.transform.position = { -0.8f, 0.0f, 0.6f };
+	obj1.material.baseColor = { 1.0f, 0.3f, 0.3f, 1.0f };
+	obj1.material.specStrength = 1.0f;
+	obj1.material.shininess = 8.0f;
+	obj1.solid = false;
+	m_renderItems.push_back(obj1);
+
+	RenderItem obj2;
+	obj2.mesh = &m_boxMesh;
+	obj2.transform.position = { 0.8f, 0.0f, 0.0f };
+	obj2.material.baseColor = { 0.3f, 0.8f, 1.0f, 1.0f };
+	obj2.material.specStrength = 2.0f;
+	obj2.material.shininess = 32.0f;
+	obj2.solid = true;
+	m_renderItems.push_back(obj2);
+
+	RenderItem ground;
+	ground.mesh = &m_boxMesh;
+	ground.transform.position = { 0.0f, -1.0f, 0.0f };
+	ground.transform.scale = { 10.0f, 0.2f, 10.0f };
+	ground.material.baseColor = { 0.4f, 0.8f, 0.4f, 1.0f };
+	ground.material.specStrength = 0.2f;
+	ground.material.shininess = 4.0f;
+	ground.solid = true;
+	m_renderItems.push_back(ground);
+
+	m_player.renderItem.mesh = &m_boxMesh;
+	m_player.renderItem.transform.position = { 0.0f, 0.5f, 0.0f };
+	m_player.renderItem.transform.scale = { 1.0f, 2.0f, 1.0f };
+	m_player.renderItem.material.baseColor = { 1.0f, 1.0f, 0.3f, 1.0f };
+	m_player.renderItem.material.specStrength = 2.5f;
+	m_player.renderItem.material.shininess = 64.0f;
+
+}
+
 void Window::DrawRenderItem(const RenderItem& item, const DirectX::XMMATRIX& V, const DirectX::XMMATRIX& P)
 {
+	if (!item.visible || item.mesh == nullptr)
+		return;
+
 	CBTransform cbT{};
 	XMStoreFloat4x4(&cbT.world, XMMatrixTranspose(item.transform.GetMatrix()));
 	XMStoreFloat4x4(&cbT.viewProj, XMMatrixTranspose(V * P));
-
 	m_context->UpdateSubresource(m_cbTransform.Get(), 0, nullptr, &cbT, 0, 0);
+
+	CBMaterial cbM{};
+	cbM.baseColor = item.material.baseColor;
+	cbM.specStrength = item.material.specStrength;
+	cbM.shininess = item.material.shininess;
+	m_context->UpdateSubresource(m_cbMaterial.Get(), 0, nullptr, &cbM, 0, 0);
+
 	item.mesh->Draw(m_context.Get());
 }
