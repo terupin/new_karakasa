@@ -7,6 +7,7 @@
 #include "RenderItem.h"
 #include "Input.h"
 #include "Player.h"
+#include "Scene.h"
 #include <d3d11.h>
 #include <cstdint>
 #include <wrl/client.h>
@@ -57,13 +58,10 @@ private:
 	int m_width = 0;
 	int m_height = 0;
 
-	Camera m_camera;
 	Mesh m_triangleMesh;
 	Mesh m_boxMesh;
 
-	Player m_player;
-
-	std::vector<RenderItem> m_renderItems;
+	Scene m_scene;
 
 	Microsoft::WRL::ComPtr<ID3D11Device> m_device = nullptr;
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context = nullptr;
