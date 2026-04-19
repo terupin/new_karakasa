@@ -4,11 +4,16 @@
 #include "Camera.h"
 #include "Transform.h"
 #include "Mesh.h"
+#include "RenderItem.h"
+#include "Input.h"
+#include "Player.h"
+#include "Scene.h"
 #include <d3d11.h>
 #include <cstdint>
 #include <wrl/client.h>
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
+#include <vector>
 
 
 #pragma comment(lib,"d3dcompiler.lib")
@@ -34,10 +39,12 @@ struct CBLight
 	DirectX::XMFLOAT3 pad1; //16ÉoÉCÉgã´äEçáÇÌÇπ
 };
 
-struct RenderItem
+struct CBMaterial
 {
-	Mesh* mesh = nullptr;
-	Transform transform;
+	DirectX::XMFLOAT4 baseColor;
+	float specStrength;
+	float shininess;
+	DirectX::XMFLOAT2 pad;
 };
 
 class Window {
@@ -51,12 +58,10 @@ private:
 	int m_width = 0;
 	int m_height = 0;
 
-	Camera m_camera;
 	Mesh m_triangleMesh;
 	Mesh m_boxMesh;
 
-	RenderItem m_obj1;
-	RenderItem m_obj2;
+	Scene m_scene;
 
 	Microsoft::WRL::ComPtr<ID3D11Device> m_device = nullptr;
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_context = nullptr;
@@ -69,12 +74,14 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_dsv;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbTransform;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbLight;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> m_cbMaterial;
 
 	static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 	bool InitD3D();
 	void Render();
 	bool InitResources();
+	void CreateScene();
 	void DrawRenderItem(const RenderItem& item,
 		const DirectX::XMMATRIX& V,
 		const DirectX::XMMATRIX& P);

@@ -1,12 +1,33 @@
 #include "Window.h"
+#include "Input.h"
+#include "AABB.h"
 #include <d3d11.h>
 #include <DirectXMath.h>
+#include <cfloat>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
+
+static bool CheckHorizontalHit(const RenderItem& playerItem, const std::vector<RenderItem>& items)
+{
+	AABB playerBox = MakeAABB(playerItem.transform);
+
+	for (const auto& item : items)
+	{
+		if (!item.visible || item.mesh == nullptr || !item.solid)
+			continue;
+
+		AABB itemBox = MakeAABB(item.transform);
+
+		if (Intersects(playerBox, itemBox))
+			return true;
+	}
+
+	return false;
+}
 
 bool Window::Create(HINSTANCE hInst, int width, int height, const wchar_t* title)
 {
@@ -190,19 +211,18 @@ bool Window::InitD3D()
 	if (!InitResources())
 		return false;
 
-	m_obj1.mesh = &m_triangleMesh;
-	m_obj2.mesh = &m_boxMesh;
-
-	m_obj1.transform.position = { -0.8f, 0.0f, 0.6f };
-	m_obj2.transform.position = { 0.8f, 0.0f, 0.0f };
+	CreateScene();
 
 	return true;
 }
 
 void Window::Render()
 {
-	//カメラ更新
-	m_camera.Update();
+	//入力更新
+	Input::Update();
+
+	float dt = 1.0f / 60.0f;
+	m_scene.Update(dt);
 
 	//クリア
 	const float clearColor[4] = { 0.1f,0.2f,0.8f,1.0f };
@@ -216,12 +236,7 @@ void Window::Render()
 	m_context->VSSetShader(m_vs.Get(), nullptr, 0);
 	m_context->PSSetShader(m_ps.Get(), nullptr, 0);
 
-
-	//行列
-	static float angle = 0.0f;
-	angle += 0.01f;
-
-	XMMATRIX V = m_camera.GetViewMatrix();
+	XMMATRIX V = m_scene.camera.GetViewMatrix();
 
 	//プロジェクション（遠近）
 	float fovY = XM_PIDIV4; //45度
@@ -230,29 +245,37 @@ void Window::Render()
 
 	//b1 Light
 	CBLight cbL{};
-	cbL.lightDir = XMFLOAT3(0.3f, -0.6f, 1.0f);
-	cbL.lightColor = XMFLOAT4(1, 1, 1, 1);
-	cbL.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
-	cbL.cameraPos = m_camera.GetPosition();
-	cbL.specStrength = 4.0f;
-	cbL.shininess = 8.0f;
+	cbL.lightDir = DirectX::XMFLOAT3(0.3f, -1.0f, 0.5f);
+	cbL.lightColor = DirectX::XMFLOAT4(1.2f, 1.2f, 1.2f, 1.0f);
+	cbL.ambient = DirectX::XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
+	cbL.cameraPos = m_scene.camera.GetPosition();
 	m_context->UpdateSubresource(m_cbLight.Get(), 0, nullptr, &cbL, 0, 0);
 
 	// VS/PS にセット
 	ID3D11Buffer* vsCBs[] = { m_cbTransform.Get() };
 	m_context->VSSetConstantBuffers(0, 1, vsCBs);
 
-	ID3D11Buffer* psCBs[] = { m_cbLight.Get() };
-	m_context->PSSetConstantBuffers(1, 1, psCBs);
+	ID3D11Buffer* psCBs[] =
+	{
+		m_cbTransform.Get(),
+		m_cbLight.Get(),
+		m_cbMaterial.Get()
+	};
+	m_context->PSSetConstantBuffers(0, 3, psCBs);
 
-	ID3D11Buffer* psCBs0[] = { m_cbTransform.Get() };
-	m_context->PSSetConstantBuffers(0, 1, psCBs0);
+	static float angle = 0.0f;
+	angle += 0.01f;
 
-	m_obj1.transform.rotation.y = angle;
-	m_obj2.transform.rotation.y = angle;
+	if (m_scene.items.size() > 0) m_scene.items[0].transform.rotation.y = angle;
+	if (m_scene.items.size() > 1) m_scene.items[1].transform.rotation.y = angle;
 
-	DrawRenderItem(m_obj1, V, P);
-	DrawRenderItem(m_obj2, V, P);
+	for (const auto& item : m_scene.items)
+	{
+		DrawRenderItem(item, V, P);
+	}
+
+	//Playerは別描画
+	DrawRenderItem(m_scene.player.renderItem, V, P);
 
 	m_swapChain->Present(1, 0);
 }
@@ -324,13 +347,16 @@ bool Window::InitResources()
 	hr = m_device->CreateBuffer(&cbd, nullptr, m_cbLight.GetAddressOf());
 	if (FAILED(hr)) return false;
 
+	cbd.ByteWidth = sizeof(CBMaterial);
+	hr = m_device->CreateBuffer(&cbd, nullptr, m_cbMaterial.GetAddressOf());
+	if (FAILED(hr)) return false;
+
 
 	//Input Layer
 	D3D11_INPUT_ELEMENT_DESC layout[] =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{ "COLOR",0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
 	};
 
 	hr = m_device->CreateInputLayout(
@@ -351,12 +377,26 @@ bool Window::InitResources()
 	return true;
 }
 
+void Window::CreateScene()
+{
+	m_scene.Create(&m_triangleMesh, &m_boxMesh);
+}
+
 void Window::DrawRenderItem(const RenderItem& item, const DirectX::XMMATRIX& V, const DirectX::XMMATRIX& P)
 {
+	if (!item.visible || item.mesh == nullptr)
+		return;
+
 	CBTransform cbT{};
 	XMStoreFloat4x4(&cbT.world, XMMatrixTranspose(item.transform.GetMatrix()));
 	XMStoreFloat4x4(&cbT.viewProj, XMMatrixTranspose(V * P));
-
 	m_context->UpdateSubresource(m_cbTransform.Get(), 0, nullptr, &cbT, 0, 0);
+
+	CBMaterial cbM{};
+	cbM.baseColor = item.material.baseColor;
+	cbM.specStrength = item.material.specStrength;
+	cbM.shininess = item.material.shininess;
+	m_context->UpdateSubresource(m_cbMaterial.Get(), 0, nullptr, &cbM, 0, 0);
+
 	item.mesh->Draw(m_context.Get());
 }
