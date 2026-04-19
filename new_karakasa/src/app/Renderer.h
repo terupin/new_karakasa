@@ -22,6 +22,14 @@ struct CBLight
 	float pad1;
 };
 
+struct CBMaterial
+{
+	DirectX::XMFLOAT4 baseColor;
+	float specStrength;
+	float shininess;
+	DirectX::XMFLOAT2 pad;
+};
+
 class Renderer
 {
 public:
